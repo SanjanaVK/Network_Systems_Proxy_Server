@@ -64,6 +64,43 @@ char * check_ip_in_cache(char * t2)
     
 }
 
+int check_ip_is_forbidden(char * t2, char * temp_ip_addr)
+{
+	char * temp_t2 = t2;
+    FILE *file = fopen ("forbidden_sites.txt", "r");
+    if(file == NULL)
+    {
+        perror("File not opened :");
+        exit(-1);
+    }
+    printf("Reading forbidden sites file.......\n");
+    
+    char line[MAXBUF];
+    while(fgets(line, sizeof(line), file) != NULL)
+    {
+    	char * token;
+    	printf("line is %s\n", line);
+    	token = strtok(line, "\n");
+    	if(token != NULL)
+    	{
+    		printf("host name or ip address is %s\n", token);
+    		if(strcmp(token, t2) == 0)
+    		{
+    			printf("%s: It is a forbidden site\n", token);
+    			fclose(file);
+    			return -1;
+    		}
+    		if(strcmp(token, temp_ip_addr) == 0)
+    		{
+    			printf("%s: It is a forbidden site\n", token);
+    			fclose(file);
+    			return -1;
+    		}
+    	}
+    }
+    fclose(file);
+    return 0; 
+}
 int write_ip_to_cache(char * t2, char * host_addr, unsigned long int length)
 {
 	int fd_write;
@@ -153,7 +190,7 @@ int main(int argc,char* argv[])
 						flag=1;
 						break;
 					}
-					else if(t2[i] == '?')
+					else if(t2[i] == '?' || t2[i] == '/')
 					{
 						break;
 					}
@@ -175,7 +212,8 @@ int main(int argc,char* argv[])
    
 				sprintf(t2,"%s",temp);
 				printf("host = %s",t2);
-				char * cache_ip = check_ip_in_cache(t2);
+				
+				char * cache_ip = check_ip_in_cache(t2); //check if site in cache
 				//printf("version is %s\n", version);
    
 				if(cache_ip == NULL)
@@ -205,6 +243,7 @@ int main(int argc,char* argv[])
                 	printf("IP address is %s\n", cache_ip);
                 }
                 //printf("version is %s\n", version);
+                
    
 				if(flag==1)
 				{
@@ -229,8 +268,15 @@ int main(int argc,char* argv[])
 				bzero((char*)&host_addr,sizeof(host_addr));
 				host_addr.sin_port=htons(port);
 				host_addr.sin_family=AF_INET;
-				printf("host length is %d\n, our length is %d\n", host->h_length, strlen(cache_ip));
+				//printf("host length is %d\n, our length is %d\n", host->h_length, strlen(cache_ip));
 				bcopy((char*)cache_ip,(char*)&host_addr.sin_addr.s_addr,strlen(cache_ip));
+				char temp_ip_addr[100];
+				strcpy(temp_ip_addr, inet_ntoa(host_addr.sin_addr));
+				if(check_ip_is_forbidden(t2, temp_ip_addr) == -1) //checking if site is forbidden
+			    {
+			    	send(newsockfd,"ERROR 403 FORBIDDEN\n",20,0);
+					goto closing;
+			    }
 				//bcopy((char*)host->h_addr,(char*)&host_addr.sin_addr.s_addr,host->h_length);
 				//printf("version is %s\n", version);
    
