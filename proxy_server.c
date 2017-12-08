@@ -30,34 +30,41 @@ char * check_ip_in_cache(char * t2)
     FILE *file = fopen ("ip_cache.txt", "r");
     if(file == NULL)
     {
-        perror("File not opened :");
-        exit(-1);
+        //perror("File not opened :");
+        //exit(-1);
+        goto last;
     }
     printf("Reading ip cache file.......\n");
     char line[MAXBUF];
     while(fgets(line, sizeof(line), file) != NULL)
     {
     	char * token;
+    	printf("line is %s\n", line);
     	token = strtok(line, " ");
     	if(token != NULL)
     	{
+    		printf("host name is %s\n", token);
     		if(strcmp(token, t2) == 0)
     		{
     			token = strtok(NULL, " ");
     			if(token != NULL)
     			{
+    				printf("host name is %s\n", token);
     				strcpy(temp_ip, token);
     				printf("Found ip address\n");
+    				fclose(file);
     				return temp_ip;
     			}
     		}
     	}
     }
-    return NULL; 
     fclose(file);
+    last:
+    return NULL; 
+    
 }
 
-int write_ip_to_cache(char * t2, char * host_addr)
+int write_ip_to_cache(char * t2, char * host_addr, unsigned long int length)
 {
 	int fd_write;
 	fd_write = open( "ip_cache.txt", O_RDWR|O_CREAT|O_APPEND, 0666);
@@ -68,7 +75,7 @@ int write_ip_to_cache(char * t2, char * host_addr)
 	}
 	write(fd_write, t2, strlen(t2));
 	write(fd_write, " ", 1);
-	write(fd_write, host_addr, strlen(host_addr));
+	write(fd_write, host_addr, length);
     write(fd_write, "\n", 1);  
     close(fd_write);
     return 0;     
@@ -131,6 +138,10 @@ int main(int argc,char* argv[])
 			if(((strncmp(t1,"GET",3)==0))&&((strncmp(t3,"HTTP/1.1",8)==0)||(strncmp(t3,"HTTP/1.0",8)==0))&&(strncmp(t2,"http://",7)==0))
 			{
 				strcpy(t1,t2);
+				char version[10];
+				bzero(version, sizeof(version));
+				memcpy(version, t3, strlen(t3));
+				printf("version is %s\n", version);
    
 				flag=0;
    
@@ -149,26 +160,27 @@ int main(int argc,char* argv[])
 				}
    
 				temp=strtok(t2,"//");
-				printf("flag is %d, temp is %s\n", flag, temp);
+				//printf("flag is %d, temp is %s\n", flag, temp);
 				if(flag==0)
 				{
 					port=80;
 					temp=strtok(NULL,"/");
-					printf("flag is 0, temp is %s\n", temp);
+				//	printf("flag is 0, temp is %s\n", temp);
 				}
 				else
 				{
 					temp=strtok(NULL,":");
-					printf("flag is 1, temp is %s\n", temp);
+				//	printf("flag is 1, temp is %s\n", temp);
 				}
    
 				sprintf(t2,"%s",temp);
 				printf("host = %s",t2);
-				char * cache_ip = NULL;
-				//check_ip_in_cache(t2);
+				char * cache_ip = check_ip_in_cache(t2);
+				//printf("version is %s\n", version);
+   
 				if(cache_ip == NULL)
 				{
-                	printf("getting ip address.....\n");
+                	printf("\n...........getting ip address and storing in cache.....\n");
                 	host=gethostbyname(t2);
 				
                 	if(host == NULL)
@@ -177,7 +189,7 @@ int main(int argc,char* argv[])
 						goto closing;
 					}
 					cache_ip = (char *)malloc(host->h_length * sizeof(char));
-					int result = write_ip_to_cache(t2, (char *)host->h_addr);
+					int result = write_ip_to_cache(t2, (char *)host->h_addr, host->h_length);
 					if(result == -1)
 					{
 						printf("Could not create cache\n");
@@ -192,6 +204,8 @@ int main(int argc,char* argv[])
                 {
                 	printf("IP address is %s\n", cache_ip);
                 }
+                //printf("version is %s\n", version);
+   
 				if(flag==1)
 				{
 					temp=strtok(NULL,"/");
@@ -200,21 +214,26 @@ int main(int argc,char* argv[])
    
    
 				strcat(t1,"^]");
-				printf("\nt1 after adding ^] is %s\n", t1);
+				//printf("\nt1 after adding ^] is %s\n", t1);
 				temp=strtok(t1,"//");
-				printf("temp token on // is %s\n", temp);
+				//printf("temp token on // is %s\n", temp);
 				temp=strtok(NULL,"/");	
-				printf("temp token on / is %s\n", temp);
+				//printf("temp token on / is %s\n", temp);
 				if(temp!=NULL)
 					temp=strtok(NULL,"^]");
-				printf("temp token on ^] is %s\n", temp);
+				//printf("temp token on ^] is %s\n", temp);
 				printf("\npath = %s\nPort = %d\n",temp,port);
+                //printf("version is %s\n", version);
    
    
 				bzero((char*)&host_addr,sizeof(host_addr));
 				host_addr.sin_port=htons(port);
 				host_addr.sin_family=AF_INET;
-				bcopy((char*)host->h_addr,(char*)&host_addr.sin_addr.s_addr,host->h_length);
+				printf("host length is %d\n, our length is %d\n", host->h_length, strlen(cache_ip));
+				bcopy((char*)cache_ip,(char*)&host_addr.sin_addr.s_addr,strlen(cache_ip));
+				//bcopy((char*)host->h_addr,(char*)&host_addr.sin_addr.s_addr,host->h_length);
+				//printf("version is %s\n", version);
+   
    
 				sockfd1=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
 				newsockfd1=connect(sockfd1,(struct sockaddr*)&host_addr,sizeof(struct sockaddr));
@@ -229,8 +248,12 @@ int main(int argc,char* argv[])
 					sprintf(buffer,"GET /%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",temp,t3,t2);
 					//sprintf(buffer,"GET http://%s/%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",t2,temp,t3,t2);
 				else
-					sprintf(buffer,"GET / %s\r\nHost: %s\r\nConnection: close\r\n\r\n",t3,t2);
+				{
+					//printf("version is %s\n", version);
+					sprintf(buffer,"GET / %s\r\nHost: %s\r\nConnection: close\r\n\r\n",version,t2);
 					//sprintf(buffer,"GET http://%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",t2,t3,t2);
+				}
+					
  
  
 				n=send(sockfd1,buffer,strlen(buffer),0);
