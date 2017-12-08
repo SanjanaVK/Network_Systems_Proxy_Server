@@ -12,8 +12,8 @@
 #include<sys/stat.h>
 #include<fcntl.h>
 #include<stddef.h>
-//#include <openssl/md5.h>
-#include <sys/signal.h>
+#include<openssl/md5.h>
+#include<sys/signal.h>
 
 #define MAXBUF 2048
    
@@ -118,6 +118,49 @@ int write_ip_to_cache(char * t2, char * host_addr, unsigned long int length)
     return 0;     
 }
 
+int page_cache_present(char * filename)
+{
+	FILE *temp_fp = fopen(filename, "r");
+    if (temp_fp == NULL)
+    {
+        printf("File not present\n");
+        return 0;
+    }
+    fclose(temp_fp);
+    return 1;
+}
+/*Check for md5sum of the file and return mod value with 4*/
+void check_md5sum(char * url, char * md5sum_temp)
+{
+    int nbytes;
+    int result = 0;
+    char buffer[MAXBUF];
+        
+    int n;
+    MD5_CTX c;
+    char buf[512];
+    ssize_t bytes;
+    unsigned char out[MD5_DIGEST_LENGTH];
+    unsigned char temp[MD5_DIGEST_LENGTH];
+
+    MD5_Init(&c);
+    
+    MD5_Update(&c, url, strlen(url));
+    MD5_Final(out, &c);
+
+    //printf("In md5sum function\n");
+
+    for(n=0; n<MD5_DIGEST_LENGTH; n++)
+    {   
+    	char temp[3];
+    	//printf("%02x", out[n]);
+        //printf("%c\n", out[n]);
+        sprintf(temp, "%0X", out[n]);
+        strcat(md5sum_temp, temp);
+    }
+    printf("\nmd5sum: %s\n", md5sum_temp);
+    return;
+}
 int main(int argc,char* argv[])
 {
 	pid_t pid;
@@ -171,6 +214,7 @@ int main(int argc,char* argv[])
 			sscanf(buffer,"%s %s %s",t1,t2,t3);
             printf("received is:\n");
             printf("t1:::%s\nt2:::%s\nt3:::%s:::\n", t1, t2, t3);
+
    
 			if(((strncmp(t1,"GET",3)==0))&&((strncmp(t3,"HTTP/1.1",8)==0)||(strncmp(t3,"HTTP/1.0",8)==0))&&(strncmp(t2,"http://",7)==0))
 			{
@@ -178,8 +222,12 @@ int main(int argc,char* argv[])
 				char version[10];
 				bzero(version, sizeof(version));
 				memcpy(version, t3, strlen(t3));
+				char url[300];
+				bzero(url, sizeof(url));
+				memcpy(url, t2, strlen(t2));
 				printf("version is %s\n", version);
-   
+				printf("url is %s\n", url);
+				
 				flag=0;
    
 				for(i=7;i<strlen(t2);i++)
@@ -308,13 +356,60 @@ int main(int argc,char* argv[])
 					error("Error writing to socket");
 				else
 				{
-					do
+					char md5sum_temp[32];
+					bzero(md5sum_temp, sizeof(md5sum_temp));
+					check_md5sum(url, md5sum_temp);
+                	printf("Completed md5sum\n");
+                	printf("md5sum is %s\n", md5sum_temp);
+                	printf("size of md5sum is %d\n",strlen(md5sum_temp));
+					if(page_cache_present(md5sum_temp) == 0)
 					{
-						bzero((char*)buffer,500);
-						n=recv(sockfd1,buffer,500,0);
-						if(!(n<=0))
-						send(newsockfd,buffer,n,0);
-					}while(n>0);
+						int fd_write;
+						printf("md5sum is %s\n", md5sum_temp);
+                		printf("size of md5sum is %d\n",strlen(md5sum_temp));
+						fd_write = open( md5sum_temp, O_RDWR|O_CREAT|O_APPEND, 0666);
+						printf("md5sum is %s\n", md5sum_temp);
+                		printf("size of md5sum is %d\n",strlen(md5sum_temp));
+						if(fd_write == -1)
+						{
+							perror("File:");
+							return -1;
+						}
+						
+					    do
+					    {
+							bzero((char*)buffer,500);
+							n=recv(sockfd1,buffer,500,0);
+							if(!(n<=0))
+							{
+								write(fd_write, buffer, n);
+								send(newsockfd,buffer,n,0);
+							}
+						}while(n>0);
+					}
+					else
+					{
+                    	printf("Page is present in the cache\n");
+                    	FILE *file = fopen (md5sum_temp, "r");
+    					if(file == NULL)
+    					{
+        					perror("File not opened :");
+        					exit(-1);
+    					}
+    					printf("Reading Cached file.......\n");
+    
+    					char cache_buf[500];
+    					
+    					while( !feof(file))
+    					{
+    						bzero(cache_buf, sizeof(cache_buf));
+    						int result = fread(cache_buf, 1, 500, file);
+    						send(newsockfd,cache_buf,result,0);
+
+    					}
+    					fclose(file);
+                    	
+					}
 				}
 				//close(newsockfd);
 			}
