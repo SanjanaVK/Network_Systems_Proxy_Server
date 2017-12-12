@@ -17,8 +17,22 @@
 #include<time.h>
 #include<memory.h>
 #include<dirent.h>
+#include<semaphore.h>
+#include <pthread.h>
 
 #define MAXBUF 2048
+static sem_t *mutex;
+static int expire_time;
+
+struct cache_s
+{
+	char md5sum_cache[32];
+	double timestamp;
+};
+
+volatile struct cache_s cache[10000]; 
+volatile int cache_index = 0;
+volatile int cache_flag = 0;
    
 void error(char* msg)
 {
@@ -146,6 +160,33 @@ int page_cache_present(char * filename)
     fclose(temp_fp);
     return 1;
 }
+
+int timestamp_cache_present(char * filename)
+{
+	char fullpath[50] ;
+	bzero(fullpath, sizeof(fullpath));
+	strcpy(fullpath,"./timestamp/");
+	//printf("full path is %s\n", fullpath);
+	struct stat st = {0};
+    if (stat(fullpath, &st) == -1) 
+    {
+        mkdir(fullpath, 0700);
+        printf("directory %s is created\n", fullpath);
+    }
+    strcat(fullpath, filename);
+    bzero(filename, sizeof(filename));
+    strcpy(filename, fullpath);
+    printf("filename path is %s\n", filename);
+	/*FILE *temp_fp = fopen(filename, "r");
+    if (temp_fp == NULL)
+    {
+        printf("File not present\n");
+        return 0;
+    }
+    fclose(temp_fp);*/
+    return 1;
+}
+
 /*Check for md5sum of the file and return mod value with 4*/
 void check_md5sum(char * url, char * md5sum_temp)
 {
@@ -178,9 +219,58 @@ void check_md5sum(char * url, char * md5sum_temp)
     //printf("\nmd5sum: %s\n", md5sum_temp);
     return;
 }
-int main(int argc,char* argv[])
+
+int check_for_timestamp(double diff_time, char * filename)
 {
+	FILE *file = fopen (filename, "r");
+    if(file == NULL)
+    {
+        perror("File not opened :");
+        exit(-1);
+    }
+    printf("Reading database file.......\n");
+    
+    char cache_buf[MAXBUF];
+    					
+    while(fgets(cache_buf, sizeof(cache_buf), file) != NULL)
+    {
+    	char * token = strtok(cache_buf, "\n");
+    	if(token != NULL)
+    	{
+    		puts(token);
+    		/*printf(" md5sum is %s\n",md5sum_temp);
+    		if(strcmp(token, md5sum_temp) == 0)
+    	    {
+    	    	printf("Found md5sum in database\n");
+    	    	token = strtok(NULL, " \n");*/
+    	    	//if(token != NULL)
+    	    	//{
+                    double diff_time_temp = 0;
+				    diff_time_temp = atof(token);
+				    printf("float value is %f\n", diff_time_temp);
+				    if((diff_time_temp + expire_time) > (diff_time))
+				    {
+				    	printf("cache is new enough\n");
+				    	return 1;
+				    }
+				    else
+				    {
+				    	printf("cache to be updated\n");
+				    	return 0;
+				    }
+    	    	//}
+    	    //}
+
+    	}
+    }
+    fclose(file);
+    return -1;
+}
+
+int main(int argc,char* argv[])
+{ 
 	pid_t pid;
+	//sem_init(mutex,0,1);
 	struct sockaddr_in addr_in,cli_addr,serv_addr;
 	struct hostent* host;
 	int sockfd,connfd;
@@ -188,9 +278,12 @@ int main(int argc,char* argv[])
 	double diff_time;
 	start_time = time(0);
    
-	if(argc<2)
-	error("./proxy <port_no>");  
+	if(argc<3)
+	error("./proxy <port_no> <expiration time>");  
 	printf("\n*****WELCOME TO PROXY SERVER*****\n");
+
+	expire_time = atoi(argv[2]);
+	printf("expire time is %d", expire_time);
    
 	bzero((char*)&serv_addr,sizeof(serv_addr));
 	bzero((char*)&cli_addr, sizeof(cli_addr));
@@ -224,8 +317,13 @@ int main(int argc,char* argv[])
 		if(pid==0)
 		{
 			printf("Created a new child.....\n");
+			int i = 0;
+			//for(i = 0 ; i <20000; i++)
+			//{
+				//printf("waiting ................\n");
+			//}
 			struct sockaddr_in host_addr;
-			int flag=0,connfd1,n,port=0,i,sockfd1;
+			int flag=0,connfd1,n,port=0,sockfd1;
 			char buffer[510],request[300],request_url[300],request_version[10];
 			char* temp=NULL;
 			bzero((char*)buffer,500);
@@ -239,7 +337,14 @@ int main(int argc,char* argv[])
    
 			if(((strncmp(request,"GET",3)==0))&&((strncmp(request_version,"HTTP/1.1",8)==0)||(strncmp(request_version,"HTTP/1.0",8)==0))&&(strncmp(request_url,"http://",7)==0))
 			{
-				strcpy(request,request_url);
+		//		printf("cache present is:\n");
+				//sleep(5);
+				int i = 0;
+		//	    for(i = 0; i < cache_index; i++)
+		//	    {
+		//	    	printf("md5sum is : %s, timestamp is %f\n", cache[i].md5sum_cache, cache[i].timestamp);	
+		//	    }
+			    strcpy(request,request_url);
 				char version[10];
 				bzero(version, sizeof(version));
 				memcpy(version, request_version, strlen(request_version));
@@ -388,11 +493,13 @@ int main(int argc,char* argv[])
                 	strcpy(cache_filename, md5sum_temp);
 					if(page_cache_present(cache_filename) == 0)
 					{
-						int fd_write;
+						
+					new_cache: ;
+					    int fd_write;
 						printf("md5sum is %s\n", md5sum_temp);
                 	//	printf("size of md5sum is %d\n",strlen(md5sum_temp));
                 	//	printf("directory is %s\n", cache_filename);
-						fd_write = open( cache_filename, O_RDWR|O_CREAT|O_APPEND, 0666);
+						fd_write = open( cache_filename, O_RDWR|O_CREAT|O_APPEND|O_TRUNC, 0666);
 					//	printf("md5sum is %s\n", md5sum_temp);
                 	//	printf("size of md5sum is %d\n",strlen(md5sum_temp));
 						if(fd_write == -1)
@@ -411,25 +518,40 @@ int main(int argc,char* argv[])
 								send(connfd,buffer,n,0);
 							}
 						}while(n>0);
+						//P(&mutex);
+						//sem_wait(mutex);
 						end_time = time(0);
 						diff_time = difftime(end_time, start_time);
 						printf("diff in time is %f\n", diff_time);
+						/*if(cache_flag == 0)
+						{
+						strcpy(cache[cache_index].md5sum_cache, md5sum_temp);
+						cache[cache_index++].timestamp = diff_time;
+					    }*/
 						char diff_time_char[50];
 						bzero(diff_time_char, sizeof(diff_time_char));
 						sprintf(diff_time_char, "%f", diff_time);
 						int fd2_write;
-						fd2_write = open("database.txt", O_RDWR|O_CREAT|O_APPEND, 0666);
+						char timestamp_filename[200];
+                		bzero(timestamp_filename, sizeof(timestamp_filename));
+                		///printf("FILENAME IS %S mdsum is %s\n", timestamp_filename, md5sum_temp);
+                		strcpy(timestamp_filename, md5sum_temp);
+                		//printf("FILENAME IS %S mdsum is %s\n", timestamp_filename, md5sum_temp);
+                		timestamp_cache_present(timestamp_filename);
+						fd2_write = open(timestamp_filename, O_RDWR|O_CREAT|O_APPEND|O_TRUNC, 0666);
 						
 						if(fd2_write == -1)
 						{
 							perror("File:");
 							return -1;
 						}
-						write(fd2_write, md5sum_temp, strlen(md5sum_temp));
-						write(fd2_write, " ", 1);
+						//write(fd2_write, md5sum_temp, strlen(md5sum_temp));
+						//write(fd2_write, " ", 1);
 						write(fd2_write, diff_time_char, strlen(diff_time_char));
 						write(fd2_write, "\n", 1);
 						close(fd2_write);
+						//sem_post(mutex);
+						//V(&mutex);
 						
 						//write(fd_write, buffer, n);
 
@@ -439,8 +561,50 @@ int main(int argc,char* argv[])
                     	printf("Page is present in the cache\n");
                     	end_time = time(0);
 						diff_time = difftime(end_time, start_time);
+						//printf("mdsum is %s\n", md5sum_temp);
 						printf("diff in time is %f\n", diff_time);
-						//check_timestamp
+						//printf("mdsum is %s\n", md5sum_temp);
+						char diff_time_char[10];
+						bzero(diff_time_char, sizeof(diff_time_char));
+						//printf("mdsum is %s\n", md5sum_temp);
+						sprintf(diff_time_char, "%f", diff_time);
+						printf("mdsum is %s\n", md5sum_temp);
+						int i = 0;
+						int result = 0;
+						char timestamp_filename[200];
+                		bzero(timestamp_filename, sizeof(timestamp_filename));
+                		strcpy(timestamp_filename, md5sum_temp);
+                		//printf("FILENAME IS %s mdsum is %s\n", timestamp_filename, md5sum_temp);
+                		timestamp_cache_present(timestamp_filename);
+                		//printf("FILENAME IS %s mdsum is %s\n", timestamp_filename, md5sum_temp);
+                		result = check_for_timestamp(diff_time, timestamp_filename);
+                		if(result == 1)
+                		{
+                			goto next;
+                		}
+                        else
+                        {
+                        	printf("Updating the cache file and timestamp file\n");
+                        	goto new_cache;
+                        }
+
+  						/*for(i = 0; i < cache_index; i++)
+						{
+							if(strcmp(cache[i].md5sum_cache, md5sum_temp) == 0)
+							{
+								if(diff_time < (cache[i].timestamp + 60))
+								{
+									printf("diff in time is withing 60 secs\n");
+								}
+								else
+								{
+									cache[i].timestamp = diff_time;
+									cache_flag = 1;
+									goto new_cache;
+								}
+							}
+						}*/
+                        next:;
                     	FILE *file = fopen (cache_filename, "r");
     					if(file == NULL)
     					{
