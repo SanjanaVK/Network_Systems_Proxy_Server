@@ -33,13 +33,15 @@ struct cache_s
 volatile struct cache_s cache[10000]; 
 volatile int cache_index = 0;
 volatile int cache_flag = 0;
-   
+ 
+/*Functions to print error messages*/  
 void error(char* msg)
 {
 perror(msg);
 exit(0);
 }
   
+ /*Function to check if ip to host mapping is stored in the cache*/
 char * check_ip_in_cache(char * request_url)
 {
     char * temp_request_url = request_url;
@@ -47,8 +49,6 @@ char * check_ip_in_cache(char * request_url)
     FILE *file = fopen ("ip_cache.txt", "r");
     if(file == NULL)
     {
-        //perror("File not opened :");
-        //exit(-1);
         goto last;
     }
     printf("Reading ip cache file.......\n");
@@ -56,7 +56,6 @@ char * check_ip_in_cache(char * request_url)
     while(fgets(line, sizeof(line), file) != NULL)
     {
     	char * token;
-    	//printf("line is %s\n", line);
     	token = strtok(line, " ");
     	if(token != NULL)
     	{
@@ -66,7 +65,6 @@ char * check_ip_in_cache(char * request_url)
     			token = strtok(NULL, " ");
     			if(token != NULL)
     			{
-    				//printf("host name is %s\n", token);
     				strcpy(temp_ip, token);
     				printf("Found ip address in cache\n");
     				fclose(file);
@@ -80,7 +78,7 @@ char * check_ip_in_cache(char * request_url)
     return NULL; 
     
 }
-
+/*Function to check if ip is forbidden*/
 int check_ip_is_forbidden(char * request_url, char * temp_ip_addr)
 {
 	char * temp_request_url = request_url;
@@ -118,6 +116,8 @@ int check_ip_is_forbidden(char * request_url, char * temp_ip_addr)
     fclose(file);
     return 0; 
 }
+
+/*Function to write ip to the cache containing ip to host mapping*/
 int write_ip_to_cache(char * request_url, char * host_addr, unsigned long int length)
 {
 	int fd_write;
@@ -135,6 +135,7 @@ int write_ip_to_cache(char * request_url, char * host_addr, unsigned long int le
     return 0;     
 }
 
+/*Function to check if a cache of a certain url is present*/
 int page_cache_present(char * filename)
 {
 	char fullpath[50] ;
@@ -150,7 +151,7 @@ int page_cache_present(char * filename)
     strcat(fullpath, filename);
     bzero(filename, sizeof(filename));
     strcpy(filename, fullpath);
-    printf("filename path is %s\n", filename);
+    //printf("filename path is %s\n", filename);
 	FILE *temp_fp = fopen(filename, "r");
     if (temp_fp == NULL)
     {
@@ -161,6 +162,7 @@ int page_cache_present(char * filename)
     return 1;
 }
 
+/*Function to check if timestamp subfolder is present and create a file in the timestamp folder*/ 
 int timestamp_cache_present(char * filename)
 {
 	char fullpath[50] ;
@@ -176,18 +178,11 @@ int timestamp_cache_present(char * filename)
     strcat(fullpath, filename);
     bzero(filename, sizeof(filename));
     strcpy(filename, fullpath);
-    printf("filename path is %s\n", filename);
-	/*FILE *temp_fp = fopen(filename, "r");
-    if (temp_fp == NULL)
-    {
-        printf("File not present\n");
-        return 0;
-    }
-    fclose(temp_fp);*/
+    //printf("filename path is %s\n", filename);
     return 1;
 }
 
-/*Check for md5sum of the file and return mod value with 4*/
+/*Get md5um of the url*/
 void check_md5sum(char * url, char * md5sum_temp)
 {
     int nbytes;
@@ -211,16 +206,14 @@ void check_md5sum(char * url, char * md5sum_temp)
     for(n=0; n<MD5_DIGEST_LENGTH; n++)
     {   
     	char temp[3];
-    	//printf("%02x", out[n]);
-        //printf("%c\n", out[n]);
         sprintf(temp, "%0X", out[n]);
         strcat(md5sum_temp, temp);
     }
-    //printf("\nmd5sum: %s\n", md5sum_temp);
     return;
 }
 
-int check_for_timestamp(double diff_time, char * filename)
+/*Check if the timestamp is expired*/
+int check_for_timestamp(long int diff_time, char * filename)
 {
 	FILE *file = fopen (filename, "r");
     if(file == NULL)
@@ -238,28 +231,21 @@ int check_for_timestamp(double diff_time, char * filename)
     	if(token != NULL)
     	{
     		puts(token);
-    		/*printf(" md5sum is %s\n",md5sum_temp);
-    		if(strcmp(token, md5sum_temp) == 0)
-    	    {
-    	    	printf("Found md5sum in database\n");
-    	    	token = strtok(NULL, " \n");*/
-    	    	//if(token != NULL)
-    	    	//{
-                    double diff_time_temp = 0;
-				    diff_time_temp = atof(token);
-				    printf("float value is %f\n", diff_time_temp);
-				    if((diff_time_temp + expire_time) > (diff_time))
-				    {
-				    	printf("cache is new enough\n");
-				    	return 1;
-				    }
-				    else
-				    {
-				    	printf("cache to be updated\n");
-				    	return 0;
-				    }
-    	    	//}
-    	    //}
+    		
+            long int diff_time_temp = 0;
+            char * eptr;
+			diff_time_temp = strtol(token, &eptr, 10);
+			printf("timestamp value in file is %ld\n", diff_time_temp);
+			if((diff_time_temp + expire_time) > (diff_time))
+			{
+				printf("cache is new enough\n");
+				return 1;
+			}
+			else
+			{
+				printf("cache to be updated\n");
+				return 0;
+			}
 
     	}
     }
@@ -267,6 +253,7 @@ int check_for_timestamp(double diff_time, char * filename)
     return -1;
 }
 
+/*Main function*/
 int main(int argc,char* argv[])
 { 
 	pid_t pid;
@@ -280,10 +267,10 @@ int main(int argc,char* argv[])
    
 	if(argc<3)
 	error("./proxy <port_no> <expiration time>");  
-	printf("\n*****WELCOME TO PROXY SERVER*****\n");
+	printf("\n*****PROXY SERVER*****\n");
 
 	expire_time = atoi(argv[2]);
-	printf("expire time is %d", expire_time);
+	printf("\n\nExpiration time is %d\n\n", expire_time);
    
 	bzero((char*)&serv_addr,sizeof(serv_addr));
 	bzero((char*)&cli_addr, sizeof(cli_addr));
@@ -318,10 +305,6 @@ int main(int argc,char* argv[])
 		{
 			printf("Created a new child.....\n");
 			int i = 0;
-			//for(i = 0 ; i <20000; i++)
-			//{
-				//printf("waiting ................\n");
-			//}
 			struct sockaddr_in host_addr;
 			int flag=0,connfd1,n,port=0,sockfd1;
 			char buffer[510],request[300],request_url[300],request_version[10];
@@ -334,16 +317,10 @@ int main(int argc,char* argv[])
             //printf("received is:\n");
             //printf("request:::%s\nrequest_url:::%s\nrequest_version:::%s:::\n", request, request_url, request_version);
 
-   
+            /*Processing the request*/
 			if(((strncmp(request,"GET",3)==0))&&((strncmp(request_version,"HTTP/1.1",8)==0)||(strncmp(request_version,"HTTP/1.0",8)==0))&&(strncmp(request_url,"http://",7)==0))
 			{
-		//		printf("cache present is:\n");
-				//sleep(5);
 				int i = 0;
-		//	    for(i = 0; i < cache_index; i++)
-		//	    {
-		//	    	printf("md5sum is : %s, timestamp is %f\n", cache[i].md5sum_cache, cache[i].timestamp);	
-		//	    }
 			    strcpy(request,request_url);
 				char version[10];
 				bzero(version, sizeof(version));
@@ -358,7 +335,6 @@ int main(int argc,char* argv[])
    
 				for(i=7;i<strlen(request_url);i++)
 				{
-					//if(request_url[i]==':' || request_url[i]=='?')
 					if(request_url[i]==':')
 					{
 						flag=1;
@@ -395,13 +371,13 @@ int main(int argc,char* argv[])
                 	printf("\n...........getting ip address and storing in cache.....\n");
                 	host=gethostbyname(request_url);
 				
-                	if(host == NULL)
+                	if(host == NULL) //check if host name exists
 					{
 						send(connfd,"SERVER NOT FOUND\n",17,0);
 						goto closing;
 					}
 					cache_ip = (char *)malloc(host->h_length * sizeof(char));
-					int result = write_ip_to_cache(request_url, (char *)host->h_addr, host->h_length);
+					int result = write_ip_to_cache(request_url, (char *)host->h_addr, host->h_length);//create host name and ip address mapping
 					if(result == -1)
 					{
 						printf("Could not create cache\n");
@@ -451,35 +427,24 @@ int main(int argc,char* argv[])
 			    	send(connfd,"ERROR 403 FORBIDDEN\n",20,0);
 					goto closing;
 			    }
-				//bcopy((char*)host->h_addr,(char*)&host_addr.sin_addr.s_addr,host->h_length);
-				//printf("version is %s\n", version);
    
-   
-				
-				
-				//else
+				char md5sum_temp[32];
+				bzero(md5sum_temp, sizeof(md5sum_temp));
+				check_md5sum(url, md5sum_temp);//get md5sum of the url
+                char cache_filename[200];
+                bzero(cache_filename, sizeof(cache_filename));
+                strcpy(cache_filename, md5sum_temp);
+				if(page_cache_present(cache_filename) == 0) //check if cache is present for the url
 				{
-					char md5sum_temp[32];
-					bzero(md5sum_temp, sizeof(md5sum_temp));
-					check_md5sum(url, md5sum_temp);
-                	//printf("Completed md5sum\n");
-                	//printf("md5sum is %s\n", md5sum_temp);
-                	//printf("size of md5sum is %d\n",strlen(md5sum_temp));
-                	char cache_filename[200];
-                	bzero(cache_filename, sizeof(cache_filename));
-                	strcpy(cache_filename, md5sum_temp);
-					if(page_cache_present(cache_filename) == 0)
-					{
-						
+				    /*if not present, connect to remote server and send data and cache it*/
 					new_cache: ;
-					    sockfd1=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
-						connfd1=connect(sockfd1,(struct sockaddr*)&host_addr,sizeof(struct sockaddr));
-						sprintf(buffer,"\nConnected to %s  IP - %s\n",request_url,inet_ntoa(host_addr.sin_addr));
-						if(connfd1<0)
-							error("Error in connecting to remote server");
+					sockfd1=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+					connfd1=connect(sockfd1,(struct sockaddr*)&host_addr,sizeof(struct sockaddr));
+					sprintf(buffer,"\nConnected to %s  IP - %s\n",request_url,inet_ntoa(host_addr.sin_addr));
+					if(connfd1<0)
+						error("Error in connecting to remote server");
    
 					printf("\n%s\n",buffer);
-					//send(connfd,buffer,strlen(buffer),0);
 					bzero((char*)buffer,sizeof(buffer));
 					if(temp!=NULL)
 						sprintf(buffer,"GET /%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",temp,request_version,request_url);
@@ -493,148 +458,109 @@ int main(int argc,char* argv[])
 					
  
  
-						n=send(sockfd1,buffer,strlen(buffer),0);
-						printf("\n%s\n",buffer);
-						if(n<0)
-							error("Error writing to socket");
-						int fd_write;
-						printf("md5sum is %s\n", md5sum_temp);
-                	//	printf("size of md5sum is %d\n",strlen(md5sum_temp));
-                	//	printf("directory is %s\n", cache_filename);
-						fd_write = open( cache_filename, O_RDWR|O_CREAT|O_APPEND|O_TRUNC, 0666);
-					//	printf("md5sum is %s\n", md5sum_temp);
-                	//	printf("size of md5sum is %d\n",strlen(md5sum_temp));
-						if(fd_write == -1)
-						{
-							perror("File:");
-							return -1;
-						}
-						
-					    do
-					    {
-							bzero((char*)buffer,500);
-							n=recv(sockfd1,buffer,500,0);
-							if(!(n<=0))
-							{
-								write(fd_write, buffer, n);
-								send(connfd,buffer,n,0);
-							}
-						}while(n>0);
-						//P(&mutex);
-						//sem_wait(mutex);
-						end_time = time(0);
-						diff_time = difftime(end_time, start_time);
-						printf("diff in time is %f\n", diff_time);
-						/*if(cache_flag == 0)
-						{
-						strcpy(cache[cache_index].md5sum_cache, md5sum_temp);
-						cache[cache_index++].timestamp = diff_time;
-					    }*/
-						char diff_time_char[50];
-						bzero(diff_time_char, sizeof(diff_time_char));
-						sprintf(diff_time_char, "%f", diff_time);
-						int fd2_write;
-						char timestamp_filename[200];
-                		bzero(timestamp_filename, sizeof(timestamp_filename));
-                		///printf("FILENAME IS %S mdsum is %s\n", timestamp_filename, md5sum_temp);
-                		strcpy(timestamp_filename, md5sum_temp);
-                		//printf("FILENAME IS %S mdsum is %s\n", timestamp_filename, md5sum_temp);
-                		timestamp_cache_present(timestamp_filename);
-						fd2_write = open(timestamp_filename, O_RDWR|O_CREAT|O_APPEND|O_TRUNC, 0666);
-						
-						if(fd2_write == -1)
-						{
-							perror("File:");
-							return -1;
-						}
-						//write(fd2_write, md5sum_temp, strlen(md5sum_temp));
-						//write(fd2_write, " ", 1);
-						write(fd2_write, diff_time_char, strlen(diff_time_char));
-						write(fd2_write, "\n", 1);
-						close(fd2_write);
-						//sem_post(mutex);
-						//V(&mutex);
-						
-						//write(fd_write, buffer, n);
-
-					}
-					else
+					n=send(sockfd1,buffer,strlen(buffer),0);
+					printf("\n%s\n",buffer);
+					if(n<0)
+						error("Error writing to socket");
+					int fd_write;
+					printf("md5sum is %s\n", md5sum_temp);
+					fd_write = open( cache_filename, O_RDWR|O_CREAT|O_APPEND|O_TRUNC, 0666);
+				
+					if(fd_write == -1)
 					{
-                    	printf("Page is present in the cache\n");
-                    	end_time = time(0);
-						diff_time = difftime(end_time, start_time);
-						//printf("mdsum is %s\n", md5sum_temp);
-						printf("diff in time is %f\n", diff_time);
-						//printf("mdsum is %s\n", md5sum_temp);
-						char diff_time_char[10];
-						bzero(diff_time_char, sizeof(diff_time_char));
-						//printf("mdsum is %s\n", md5sum_temp);
-						sprintf(diff_time_char, "%f", diff_time);
-						printf("mdsum is %s\n", md5sum_temp);
-						int i = 0;
-						int result = 0;
-						char timestamp_filename[200];
-                		bzero(timestamp_filename, sizeof(timestamp_filename));
-                		strcpy(timestamp_filename, md5sum_temp);
-                		//printf("FILENAME IS %s mdsum is %s\n", timestamp_filename, md5sum_temp);
-                		timestamp_cache_present(timestamp_filename);
-                		//printf("FILENAME IS %s mdsum is %s\n", timestamp_filename, md5sum_temp);
-                		result = check_for_timestamp(diff_time, timestamp_filename);
-                		if(result == 1)
-                		{
-                			goto next;
-                		}
-                        else
-                        {
-                        	printf("Updating the cache file and timestamp file\n");
-                        	goto new_cache;
-                        }
-
-  						/*for(i = 0; i < cache_index; i++)
-						{
-							if(strcmp(cache[i].md5sum_cache, md5sum_temp) == 0)
-							{
-								if(diff_time < (cache[i].timestamp + 60))
-								{
-									printf("diff in time is withing 60 secs\n");
-								}
-								else
-								{
-									cache[i].timestamp = diff_time;
-									cache_flag = 1;
-									goto new_cache;
-								}
-							}
-						}*/
-                        next:;
-                    	FILE *file = fopen (cache_filename, "r");
-    					if(file == NULL)
-    					{
-        					perror("File not opened :");
-        					exit(-1);
-    					}
-    					printf("Reading Cached file.......\n");
-    
-    					char cache_buf[500];
-    					
-    					while( !feof(file))
-    					{
-    						bzero(cache_buf, sizeof(cache_buf));
-    						int result = fread(cache_buf, 1, 500, file);
-    						send(connfd,cache_buf,result,0);
-
-    					}
-    					fclose(file);
-                    	
+						perror("File:");
+						return -1;
 					}
+						
+					do
+					{
+						bzero((char*)buffer,500);
+						n=recv(sockfd1,buffer,500,0);
+						if(!(n<=0))
+						{
+							write(fd_write, buffer, n);
+							send(connfd,buffer,n,0);
+						}
+					}while(n>0);
+					end_time = time(0);
+					//diff_time = difftime(end_time, start_time);
+					printf("time is %ld\n", end_time);
+					char diff_time_char[50];
+					bzero(diff_time_char, sizeof(diff_time_char));
+					sprintf(diff_time_char, "%ld", end_time);
+					int fd2_write;
+					char timestamp_filename[200];
+                	bzero(timestamp_filename, sizeof(timestamp_filename));
+                	strcpy(timestamp_filename, md5sum_temp);
+                	timestamp_cache_present(timestamp_filename); //save the timestamp of the cache
+					fd2_write = open(timestamp_filename, O_RDWR|O_CREAT|O_APPEND|O_TRUNC, 0666);
+						
+					if(fd2_write == -1)
+					{
+						perror("File:");
+						return -1;
+					}
+					
+					write(fd2_write, diff_time_char, strlen(diff_time_char));
+					write(fd2_write, "\n", 1);
+					close(fd2_write);
+
+				}
+				else
+				{
+                    printf("Page is present in the cache\n"); //if cache present then serve data from the cache
+                    end_time = time(0);
+					printf("diff in time is %ld\n", end_time);
+					char diff_time_char[10];
+					bzero(diff_time_char, sizeof(diff_time_char));
+					sprintf(diff_time_char, "%ld", end_time);
+					printf("mdsum is %s\n", md5sum_temp);
+					int i = 0;
+					int result = 0;
+					char timestamp_filename[200];
+                	bzero(timestamp_filename, sizeof(timestamp_filename));
+                	strcpy(timestamp_filename, md5sum_temp);
+                	/*Check for timestamp expiration according to user input*/
+                	timestamp_cache_present(timestamp_filename); 
+                	result = check_for_timestamp(end_time, timestamp_filename);
+                	if(result == 1)
+                	{
+                		goto next;
+                	}
+                    else
+                    {
+                        printf("Updating the cache file and timestamp file\n");
+                        goto new_cache;
+                    }
+
+                    next:;
+                    FILE *file = fopen (cache_filename, "r");
+    				if(file == NULL)
+    				{
+        				perror("File not opened :");
+        				exit(-1);
+    				}
+    				printf("Reading Cached file.......\n");
+    
+    				char cache_buf[500];
+    					
+    				while( !feof(file))
+    				{
+    					bzero(cache_buf, sizeof(cache_buf));
+    					int result = fread(cache_buf, 1, 500, file);
+    					send(connfd,cache_buf,result,0);
+
+    				}
+    				fclose(file);
+                    	
 				}
 				//close(connfd);
 			}
 			else
 			{
-				send(connfd,"400 : BAD REQUEST\nONLY HTTP REQUESTS ALLOWED",18,0);
+				send(connfd,"400 : BAD REQUEST\nONLY HTTP REQUESTS ALLOWED",18,0); //sending messages for bad requests. allows only GET, HTTP.1.0 , HTTP.1.1
 			}
-		    //}
+		    
 			closing:
 			close(sockfd1);
 			close(connfd);
