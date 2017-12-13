@@ -455,32 +455,9 @@ int main(int argc,char* argv[])
 				//printf("version is %s\n", version);
    
    
-				sockfd1=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
-				connfd1=connect(sockfd1,(struct sockaddr*)&host_addr,sizeof(struct sockaddr));
-				sprintf(buffer,"\nConnected to %s  IP - %s\n",request_url,inet_ntoa(host_addr.sin_addr));
-				if(connfd1<0)
-					error("Error in connecting to remote server");
-   
-				printf("\n%s\n",buffer);
-				//send(connfd,buffer,strlen(buffer),0);
-				bzero((char*)buffer,sizeof(buffer));
-				if(temp!=NULL)
-					sprintf(buffer,"GET /%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",temp,request_version,request_url);
-					//sprintf(buffer,"GET http://%s/%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",request_url,temp,request_version,request_url);
-				else
-				{
-					//printf("version is %s\n", version);
-					sprintf(buffer,"GET / %s\r\nHost: %s\r\nConnection: close\r\n\r\n",version,request_url);
-					//sprintf(buffer,"GET http://%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",request_url,request_version,request_url);
-				}
-					
- 
- 
-				n=send(sockfd1,buffer,strlen(buffer),0);
-				printf("\n%s\n",buffer);
-				if(n<0)
-					error("Error writing to socket");
-				else
+				
+				
+				//else
 				{
 					char md5sum_temp[32];
 					bzero(md5sum_temp, sizeof(md5sum_temp));
@@ -495,7 +472,32 @@ int main(int argc,char* argv[])
 					{
 						
 					new_cache: ;
-					    int fd_write;
+					    sockfd1=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+						connfd1=connect(sockfd1,(struct sockaddr*)&host_addr,sizeof(struct sockaddr));
+						sprintf(buffer,"\nConnected to %s  IP - %s\n",request_url,inet_ntoa(host_addr.sin_addr));
+						if(connfd1<0)
+							error("Error in connecting to remote server");
+   
+					printf("\n%s\n",buffer);
+					//send(connfd,buffer,strlen(buffer),0);
+					bzero((char*)buffer,sizeof(buffer));
+					if(temp!=NULL)
+						sprintf(buffer,"GET /%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",temp,request_version,request_url);
+						//sprintf(buffer,"GET http://%s/%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",request_url,temp,request_version,request_url);
+					else
+					{
+						//printf("version is %s\n", version);
+						sprintf(buffer,"GET / %s\r\nHost: %s\r\nConnection: close\r\n\r\n",version,request_url);
+						//sprintf(buffer,"GET http://%s %s\r\nHost: %s\r\nConnection: close\r\n\r\n",request_url,request_version,request_url);
+					}
+					
+ 
+ 
+						n=send(sockfd1,buffer,strlen(buffer),0);
+						printf("\n%s\n",buffer);
+						if(n<0)
+							error("Error writing to socket");
+						int fd_write;
 						printf("md5sum is %s\n", md5sum_temp);
                 	//	printf("size of md5sum is %d\n",strlen(md5sum_temp));
                 	//	printf("directory is %s\n", cache_filename);
